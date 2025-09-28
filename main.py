@@ -1,13 +1,17 @@
-import os
 from pymongo import MongoClient
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
 
-# URI desde variable de entorno
-MONGO_URI = os.getenv("MONGO_URI")
+# Conexión directa a MongoDB Atlas
+db_user = "emiliohtp_db_user"
+db_password = "PUyvTLcwWKOQ4wwM"
+cluster = "cluster0.cvdcchr.mongodb.net"
+database = "prueba"
+
+MONGO_URI = f"mongodb+srv://{db_user}:{db_password}@{cluster}/{database}?retryWrites=true&w=majority"
 client = MongoClient(MONGO_URI)
-db = client["prueba"]   # base de datos
+db = client[database]   # base de datos
 collection = db["prueba_collection"]
 
 app = FastAPI()
