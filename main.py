@@ -7,8 +7,8 @@ from typing import List
 user = "emiliohtp_db_user"
 password = "PUyvTLcwWKOQ4wwM"
 db_name = "prueba"
-MONGO_URI = f"mongodb+srv://{user}:{password}@cluster0.cvdcchr.mongodb.net/{db_name}?retryWrites=true&w=majority&tls=true"
-
+#MONGO_URI = f"mongodb+srv://{user}:{password}@cluster0.cvdcchr.mongodb.net/{db_name}?retryWrites=true&w=majority&tls=true"
+MONGO_URI = "mongodb+srv://emiliohtp_db_user:PUyvTLcwWKOQ4wwM@cluster0.cvdcchr.mongodb.net/prueba?retryWrites=true&w=majority&tls=true"
 
 client = MongoClient(MONGO_URI)
 db = client["prueba"]
