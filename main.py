@@ -9,7 +9,7 @@ db_password = "PUyvTLcwWKOQ4wwM"
 mongo_link = f"mongodb+srv://emiliohtp_db_user:{db_password}@cluster0.cvdcchr.mongodb.net/"
 
 # Conexión a MongoDB (desde variable de entorno)
-MONGO_URI = os.getenv("mongo_link")
+MONGO_URI = os.getenv(mongo_link)
 client = MongoClient(MONGO_URI)
 db = client["prueba"]   # base de datos
 collection = db["prueba_collection"]
