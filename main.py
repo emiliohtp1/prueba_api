@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from pymongo import MongoClient
 from bson.objectid import ObjectId
+from typing import List
 import os
 
 db_password = "PUyvTLcwWKOQ4wwM"
@@ -20,6 +21,9 @@ app = FastAPI()
 class Item(BaseModel):
     name: str
     description: str
+
+class ProductosInput(BaseModel):
+    productos: List[str]
 
 @app.get("/")
 def root():
@@ -40,3 +44,23 @@ def get_items():
             "description": doc["description"]
         })
     return items
+
+@app.post("/productos")
+def create_productos(data: ProductosInput):
+    # Convertir lista en documentos para MongoDB
+    docs = [{"nombre": producto} for producto in data.productos]
+    result = collection.insert_many(docs)
+    return {
+        "inserted_ids": [str(_id) for _id in result.inserted_ids],
+        "msg": "Productos agregados correctamente"
+    }
+
+@app.get("/productos")
+def get_productos():
+    productos = []
+    for doc in collection.find():
+        productos.append({
+            "id": str(doc["_id"]),
+            "nombre": doc["nombre"]
+        })
+    return productos
