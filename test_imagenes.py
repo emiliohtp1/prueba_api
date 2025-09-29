@@ -2,10 +2,11 @@ import requests
 import os
 from io import BytesIO
 from PIL import Image
+import json
 
 # URL de tu API (ajústala si tu API está en Render)
 # Si estás corriendo la API localmente, probablemente sea "http://127.0.0.1:8000"
-API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+API_URL = os.getenv("API_URL_RENDER", "http://127.0.0.1:8000")
 
 def create_dummy_image(filename="test_image.png"):
     """Crea una imagen de ejemplo en memoria y la guarda temporalmente."""
@@ -22,7 +23,7 @@ def test_create_product_with_image():
     image_buffer, image_filename = create_dummy_image()
 
     # Datos del producto
-    data = {
+    product_data = {
         "product_type": "tshirt",
         "size": "M",
         "price": 25.50,
@@ -30,10 +31,13 @@ def test_create_product_with_image():
     }
 
     # Preparar los archivos para la solicitud multipart/form-data
-    files = {'image': (image_filename, image_buffer, 'image/png')}
+    files = {
+        'product_data': (None, json.dumps(product_data), 'application/json'),
+        'image': (image_filename, image_buffer, 'image/png')
+    }
 
     try:
-        response = requests.post(f"{API_URL}/productos", data=data, files=files)
+        response = requests.post(f"{API_URL}productos", files=files)
         response.raise_for_status()  # Lanza una excepción para códigos de estado de error (4xx o 5xx)
         result = response.json()
         print("Respuesta exitosa:", result)
