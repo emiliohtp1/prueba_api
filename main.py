@@ -36,7 +36,7 @@ def get_productos():
     for doc in collection.find():
         producto = {
             "id": str(doc["_id"]),
-            "type": doc.get("type"),
+            "product_type": doc.get("type"),
             "size": doc.get("size"),
             "price": doc.get("price"),
             "amount": doc.get("amount")
