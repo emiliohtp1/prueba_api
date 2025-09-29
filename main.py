@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 from typing import List
 import os
+from models import ProductoRopa
 
 # Leer la URI desde variables de entorno
 MONGO_URI = os.getenv("MONGO_URI")
@@ -18,11 +19,11 @@ collection = db["prueba_collection"]
 app = FastAPI()
 
 class ProductosInput(BaseModel):
-    productos: List[str]
+    productos: List[ProductoRopa]
 
 @app.post("/productos")
 def create_productos(data: ProductosInput):
-    docs = [{"nombre": producto} for producto in data.productos]
+    docs = [producto.dict() for producto in data.productos]
     result = collection.insert_many(docs)
     return {
         "inserted_ids": [str(_id) for _id in result.inserted_ids],
@@ -31,5 +32,14 @@ def create_productos(data: ProductosInput):
 
 @app.get("/get_productos")
 def get_productos():
-    productos = [{"id": str(doc["_id"]), "nombre": doc["nombre"]} for doc in collection.find()]
+    productos = []
+    for doc in collection.find():
+        producto = {
+            "id": str(doc["_id"]),
+            "type": doc.get("type"),
+            "size": doc.get("size"),
+            "price": doc.get("price"),
+            "amount": doc.get("amount")
+        }
+        productos.append(producto)
     return productos
