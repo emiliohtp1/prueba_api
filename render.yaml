@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: fastapi-mongo
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: MONGO_URI
+        value: mongodb+srv://emiliohtp_db_user:PUyvTLcwWKOQ4wwM@cluster0.cvdcchr.mongodb.net/prueba?retryWrites=true&w=majority&tls=true

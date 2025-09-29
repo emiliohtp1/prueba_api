@@ -2,13 +2,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from pymongo import MongoClient
 from typing import List
+import os
 
-# Tu URI completo de MongoDB Atlas
-user = "emiliohtp_db_user"
-password = "PUyvTLcwWKOQ4wwM"
-db_name = "prueba"
-#MONGO_URI = f"mongodb+srv://{user}:{password}@cluster0.cvdcchr.mongodb.net/{db_name}?retryWrites=true&w=majority&tls=true"
-MONGO_URI = "mongodb+srv://emiliohtp_db_user:PUyvTLcwWKOQ4wwM@cluster0.cvdcchr.mongodb.net/prueba?retryWrites=true&w=majority&tls=true"
+# Leer la URI desde variables de entorno
+MONGO_URI = os.getenv("MONGO_URI")
 
 client = MongoClient(MONGO_URI)
 db = client["prueba"]
@@ -23,7 +20,10 @@ class ProductosInput(BaseModel):
 def create_productos(data: ProductosInput):
     docs = [{"nombre": producto} for producto in data.productos]
     result = collection.insert_many(docs)
-    return {"inserted_ids": [str(_id) for _id in result.inserted_ids], "msg": "Productos agregados correctamente"}
+    return {
+        "inserted_ids": [str(_id) for _id in result.inserted_ids],
+        "msg": "Productos agregados correctamente"
+    }
 
 @app.get("/productos")
 def get_productos():
