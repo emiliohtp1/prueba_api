@@ -6,6 +6,10 @@ import os
 
 # Leer la URI desde variables de entorno
 MONGO_URI = os.getenv("MONGO_URI")
+if not MONGO_URI:
+    raise ValueError("MONGO_URI no está definida")
+
+print(f"Conectando a MongoDB en: {MONGO_URI}")
 
 client = MongoClient(MONGO_URI)
 db = client["prueba"]
