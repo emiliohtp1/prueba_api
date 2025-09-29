@@ -4,3 +4,4 @@ pymongo==4.7.0
 azure-storage-blob==12.19.1
 requests==2.32.3
 Pillow>=11.0.0
+python-multipart
