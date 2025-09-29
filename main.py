@@ -25,7 +25,7 @@ def create_productos(data: ProductosInput):
         "msg": "Productos agregados correctamente"
     }
 
-@app.get("/productos")
+@app.get("/get_productos")
 def get_productos():
     productos = [{"id": str(doc["_id"]), "nombre": doc["nombre"]} for doc in collection.find()]
     return productos
