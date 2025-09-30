@@ -46,7 +46,7 @@ async def create_productos(
         # Subir imagen a Azure Blob Storage
         file_name = f"{image.filename}"
         blob_client = container_client.get_blob_client(file_name)
-        await blob_client.upload_blob(await image.read(), overwrite=True)
+        blob_client.upload_blob(await image.read(), overwrite=True)
         image_url = blob_client.url
 
     producto_data = {
