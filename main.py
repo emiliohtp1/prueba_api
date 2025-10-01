@@ -1,14 +1,15 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from pydantic import BaseModel
 from pymongo import MongoClient
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict
 import os
-from models import ProductoRopa
+from models import ProductoRopa, ProductosRespuesta, ProductoDetalle
 from azure.storage.blob import BlobServiceClient
 from token_blob_azure import build_blob_sas_url
 from azure.storage.blob import ContentSettings
 from io import BytesIO
 from PIL import Image
+from pymongo.errors import DuplicateKeyError
 
 # Leer la URI desde variables de entorno
 MONGO_URI = os.getenv("MONGO_URI")
@@ -33,8 +34,15 @@ print(f"Conectando a MongoDB en: {MONGO_URI}")
 print(f"Conectando a Azure Blob Storage en: {AZURE_BLOB_CONTAINER_NAME}")
 
 client = MongoClient(MONGO_URI)
-db = client["prueba"]
-collection = db["prueba_collection"]
+Db = client["prueba"]
+collection = Db["prueba_collection"]
+
+# Asegurar índice único por combinación (product_type, product_name, size)
+collection.create_index(
+    [("product_type", 1), ("product_name", 1), ("size", 1)],
+    unique=True,
+    name="uq_product_variant"
+)
 
 # Inicializar cliente de Azure Blob Storage
 blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
@@ -48,7 +56,8 @@ class ProductosInput(BaseModel):
 @app.post("/productos")
 async def create_productos(
     product_type: Literal["pant", "shirt", "tshirt", "cap", "belt"] = Form(...),
-    size: Literal["XS", "S", "M", "G", "XG"] = Form(...),
+    product_name: str = Form(...),
+    size: Literal["XS", "S", "M", "L", "XL", "XXL"] = Form(...),
     price: float = Form(...),
     amount: int = Form(...),
     image: Optional[UploadFile] = File(None)
@@ -112,31 +121,60 @@ async def create_productos(
             https_only=True,
         )
 
+    # Documento base
     producto_data = {
         "product_type": product_type,
+        "product_name": product_name,
         "size": size,
         "price": price,
         "amount": amount,
         "image_url": image_url
     }
-    
-    result = collection.insert_one(producto_data)
+
+    # Upsert por combinación única
+    query = {"product_type": product_type, "product_name": product_name, "size": size}
+    try:
+        result = collection.update_one(query, {"$set": producto_data}, upsert=True)
+    except DuplicateKeyError:
+        # En caso de condición de carrera, forzar actualización
+        result = collection.update_one(query, {"$set": producto_data}, upsert=False)
+
+    operation = "inserted" if result.upserted_id else ("updated" if result.matched_count > 0 else "no-op")
+
+    # Obtener el _id del documento afectado
+    if result.upserted_id:
+        doc_id = str(result.upserted_id)
+    else:
+        doc = collection.find_one(query, {"_id": 1})
+        doc_id = str(doc["_id"]) if doc else None
 
     return {
-        "inserted_id": str(result.inserted_id),
-        "msg": "Producto agregado correctamente"
+        "id": doc_id,
+        "operation": operation,
+        "msg": "Producto agregado/actualizado correctamente"
     }
 
-@app.get("/get_productos")
+@app.get("/get_productos", response_model=ProductosRespuesta)
 def get_productos():
-    productos = []
+    products: Dict[str, Dict[str, Dict[str, ProductoDetalle]]] = {}
+
     for doc in collection.find():
-        producto = {
-            "id": str(doc["_id"]),
-            "product_type": doc.get("product_type"),
-            "size": doc.get("size"),
-            "price": doc.get("price"),
-            "amount": doc.get("amount")
-        }
-        productos.append(producto)
-    return productos
+        product_type = doc.get("product_type")
+        product_name = doc.get("product_name", "unknown")
+        size = doc.get("size")
+        detalle = ProductoDetalle(
+            id=str(doc.get("_id")),
+            product_type=product_type,
+            size=size,
+            price=float(doc.get("price", 0)),
+            amount=int(doc.get("amount", 0)),
+            image_url=doc.get("image_url")
+        )
+
+        if product_type not in products:
+            products[product_type] = {}
+        if product_name not in products[product_type]:
+            products[product_type][product_name] = {}
+        products[product_type][product_name][size] = detalle
+
+    return {"products": products}
