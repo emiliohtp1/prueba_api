@@ -7,13 +7,14 @@ from PIL import Image
 # Si estás corriendo la API localmente, probablemente sea "http://127.0.0.1:8000"
 API_URL = os.getenv("API_URL_RENDER", "http://127.0.0.1:8000")
 
-def create_dummy_image(filename="test_image.png"):
-    """Crea una imagen de ejemplo en memoria y la guarda temporalmente."""
-    img = Image.new('RGB', (60, 30), color = 'red')
-    img_bytes = BytesIO()
-    img.save(img_bytes, format='PNG')
-    img_bytes.seek(0) # Rewind the buffer
-    return img_bytes, filename
+def create_dummy_image(filename="imagen_test.png"):
+    """Lee la imagen local 'imagen_test.png' y la retorna como buffer y nombre de archivo."""
+    if not os.path.isfile(filename):
+        raise FileNotFoundError(f"No se encontró el archivo de imagen: {filename}")
+    with open(filename, "rb") as f:
+        img_bytes = BytesIO(f.read())
+        img_bytes.seek(0)
+    return img_bytes, os.path.basename(filename)
 
 def test_create_product_with_image():
     print(f"Probando el endpoint POST /productos en {API_URL}")
