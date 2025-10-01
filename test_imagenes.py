@@ -24,19 +24,12 @@ def create_dummy_image(filename="imagen_test.png"):
     return img_bytes, os.path.basename(filename)
 
 
-def get_user_input():
+def ask_product_type_and_name():
     print("Tipos permitidos: tshirt, pant (puedes escribir 'pants'), shirt, belt, cap, shoes")
     product_type_in = input("Ingresa el tipo de producto: ").strip().lower()
-
     product_type = INPUT_TYPE_MAP.get(product_type_in, product_type_in)
     if product_type not in ALLOWED_TYPES:
         print(f"Tipo no válido: {product_type_in}. Permitidos: {', '.join(sorted(ALLOWED_TYPES))}")
-        sys.exit(1)
-
-    print("Tallas permitidas: XS, S, M, L, XL, XXL")
-    size = input("Ingresa la talla: ").strip().upper()
-    if size not in ALLOWED_SIZES:
-        print(f"Talla no válida: {size}. Permitidas: {', '.join(sorted(ALLOWED_SIZES))}")
         sys.exit(1)
 
     product_name = input("Ingresa el nombre del producto (ej. basic_logo): ").strip()
@@ -44,10 +37,54 @@ def get_user_input():
         print("El nombre del producto no puede estar vacío.")
         sys.exit(1)
 
-    return product_type, size, product_name
+    return product_type, product_name
 
 
-def post_and_check(product_type: str, size: str, product_name: str):
+def ask_sizes_and_amounts():
+    pairs = []  # [(size, amount, price)]
+    used_sizes = set()
+    while True:
+        print("Tallas permitidas: XS, S, M, L, XL, XXL")
+        size = input("Ingresa la talla: ").strip().upper()
+        if size not in ALLOWED_SIZES:
+            print(f"Talla no válida: {size}. Permitidas: {', '.join(sorted(ALLOWED_SIZES))}")
+            continue
+        if size in used_sizes:
+            print(f"La talla {size} ya fue agregada para este producto.")
+            more_dup = input("¿Deseas intentar con otra talla? (s/n): ").strip().lower()
+            if more_dup in {"s", "si", "sí"}:
+                continue
+            else:
+                break
+        # Precio obligatorio por talla
+        try:
+            price_input = input(f"Ingresa el precio para la talla {size} (obligatorio): ").strip()
+            price = float(price_input)
+            if price < 0:
+                raise ValueError
+        except ValueError:
+            print("El precio es obligatorio y debe ser un número no negativo.")
+            continue
+        # Cantidad por talla
+        try:
+            amount_str = input("Ingresa la cantidad disponible para esa talla: ").strip()
+            amount = int(amount_str)
+            if amount < 0:
+                raise ValueError
+        except ValueError:
+            print("La cantidad debe ser un entero no negativo.")
+            continue
+
+        pairs.append((size, amount, price))
+        used_sizes.add(size)
+
+        more = input("¿Deseas agregar otra talla para este producto? (s/n): ").strip().lower()
+        if more not in {"s", "si", "sí"}:
+            break
+    return pairs
+
+
+def post_and_check(product_type: str, product_name: str, size: str, amount: int, price: float):
     # Crear imagen dummy para cada iteración
     image_buffer, image_filename = create_dummy_image()
 
@@ -55,8 +92,8 @@ def post_and_check(product_type: str, size: str, product_name: str):
         "product_type": product_type,
         "product_name": product_name,
         "size": size,
-        "price": 25.50,
-        "amount": 10,
+        "price": price,
+        "amount": amount,
     }
 
     files = {"image": (image_filename, image_buffer, "image/png")}
@@ -82,8 +119,10 @@ def test_create_product_with_image():
 
     while True:
         try:
-            product_type, size, product_name = get_user_input()
-            post_and_check(product_type, size, product_name)
+            product_type, product_name = ask_product_type_and_name()
+            size_amount_pairs = ask_sizes_and_amounts()
+            for size, amount, price in size_amount_pairs:
+                post_and_check(product_type, product_name, size, amount, price)
         except requests.exceptions.RequestException as e:
             print(f"Error al realizar la solicitud: {e}")
             if hasattr(e, "response") and e.response is not None:
@@ -92,7 +131,7 @@ def test_create_product_with_image():
         except Exception as e:
             print(f"Ocurrió un error inesperado: {e}")
 
-        cont = input("\n¿Deseas agregar otro producto? (s/n): ").strip().lower()
+        cont = input("\n¿Deseas iniciar otro ciclo para otro producto? (s/n): ").strip().lower()
         if cont not in {"s", "si", "sí"}:
             print("Saliendo del script.")
             break
