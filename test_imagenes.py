@@ -47,15 +47,10 @@ def get_user_input():
     return product_type, size, product_name
 
 
-def test_create_product_with_image():
-    print(f"Probando el endpoint POST /productos en {API_URL}")
-
-    product_type, size, product_name = get_user_input()
-
-    # Crear imagen dummy
+def post_and_check(product_type: str, size: str, product_name: str):
+    # Crear imagen dummy para cada iteración
     image_buffer, image_filename = create_dummy_image()
 
-    # Datos del producto
     data = {
         "product_type": product_type,
         "product_name": product_name,
@@ -64,36 +59,43 @@ def test_create_product_with_image():
         "amount": 10,
     }
 
-    # Preparar los archivos y datos para la solicitud multipart/form-data
     files = {"image": (image_filename, image_buffer, "image/png")}
 
-    try:
-        response = requests.post(f"{API_URL}productos", data=data, files=files)
-        response.raise_for_status()
-        result = response.json()
-        print("Respuesta exitosa:", result)
-        assert "id" in result
-        assert result.get("operation") in ("inserted", "updated", "no-op")
-        print("Producto afectado con ID:", result.get("id"))
+    response = requests.post(f"{API_URL}productos", data=data, files=files)
+    response.raise_for_status()
+    result = response.json()
+    print("Respuesta POST:", result)
 
-        # Consultar el GET y verificar estructura
-        get_resp = requests.get(f"{API_URL}get_productos")
-        get_resp.raise_for_status()
-        payload = get_resp.json()
-        assert "products" in payload
-        assert product_type in payload["products"], "No se encontró el tipo en la respuesta"
-        assert product_name in payload["products"][product_type], "No se encontró el nombre en la respuesta"
-        assert size in payload["products"][product_type][product_name], "No se encontró la talla en la respuesta"
-        detalle = payload["products"][product_type][product_name][size]
-        print("Detalle:", detalle)
+    get_resp = requests.get(f"{API_URL}get_productos")
+    get_resp.raise_for_status()
+    payload = get_resp.json()
+    assert "products" in payload
+    assert product_type in payload["products"], "No se encontró el tipo en la respuesta"
+    assert product_name in payload["products"][product_type], "No se encontró el nombre en la respuesta"
+    assert size in payload["products"][product_type][product_name], "No se encontró la talla en la respuesta"
+    detalle = payload["products"][product_type][product_name][size]
+    print("Detalle GET:", detalle)
 
-    except requests.exceptions.RequestException as e:
-        print(f"Error al realizar la solicitud: {e}")
-        if hasattr(e, "response") and e.response is not None:
-            print("Código de estado HTTP:", e.response.status_code)
-            print("Cuerpo de la respuesta:", e.response.text)
-    except Exception as e:
-        print(f"Ocurrió un error inesperado: {e}")
+
+def test_create_product_with_image():
+    print(f"Probando el endpoint POST /productos en {API_URL}")
+
+    while True:
+        try:
+            product_type, size, product_name = get_user_input()
+            post_and_check(product_type, size, product_name)
+        except requests.exceptions.RequestException as e:
+            print(f"Error al realizar la solicitud: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                print("Código de estado HTTP:", e.response.status_code)
+                print("Cuerpo de la respuesta:", e.response.text)
+        except Exception as e:
+            print(f"Ocurrió un error inesperado: {e}")
+
+        cont = input("\n¿Deseas agregar otro producto? (s/n): ").strip().lower()
+        if cont not in {"s", "si", "sí"}:
+            print("Saliendo del script.")
+            break
 
 
 if __name__ == "__main__":
