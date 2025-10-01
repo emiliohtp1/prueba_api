@@ -7,6 +7,8 @@ from models import ProductoRopa
 from azure.storage.blob import BlobServiceClient
 from token_blob_azure import build_blob_sas_url
 from azure.storage.blob import ContentSettings
+from io import BytesIO
+from PIL import Image
 
 # Leer la URI desde variables de entorno
 MONGO_URI = os.getenv("MONGO_URI")
@@ -53,15 +55,53 @@ async def create_productos(
 ):
     image_url = None
     if image:
-        # Subir imagen a Azure Blob Storage con tipo de contenido correcto para que el navegador la renderice
-        file_name = f"{image.filename}"
+        # Leer bytes originales
+        original_bytes = await image.read()
+
+        # Abrir con Pillow, redimensionar y comprimir
+        with Image.open(BytesIO(original_bytes)) as im:
+            # Convertir a modo adecuado y preservar orientación EXIF
+            try:
+                im = Image.open(BytesIO(original_bytes))
+            except Exception:
+                pass
+            # Limitar tamaño máximo (ej. 1280px lado mayor)
+            max_size = (400, 400)
+            im.thumbnail(max_size, Image.LANCZOS)
+
+            # Elegir formato de salida y content-type
+            format_out = "JPEG"
+            content_type_out = "image/jpeg"
+            if im.mode in ("RGBA", "LA"):
+                # Si hay transparencia, usa PNG para evitar fondo negro
+                format_out = "PNG"
+                content_type_out = "image/png"
+                if im.mode not in ("RGBA", "LA"):
+                    im = im.convert("RGBA")
+            else:
+                if im.mode != "RGB":
+                    im = im.convert("RGB")
+
+            out_buffer = BytesIO()
+            if format_out == "JPEG":
+                im.save(out_buffer, format=format_out, quality=80, optimize=True, progressive=True)
+            else:
+                im.save(out_buffer, format=format_out, optimize=True)
+            out_buffer.seek(0)
+
+        # Preparar nombre de archivo con extensión acorde al formato de salida
+        base_name = os.path.splitext(image.filename)[0] or "imagen"
+        ext = ".jpg" if format_out == "JPEG" else ".png"
+        file_name = f"{base_name}{ext}"
+
+        # Subir imagen a Azure Blob Storage con tipo de contenido correcto
         blob_client = container_client.get_blob_client(file_name)
-        content_type = image.content_type or "image/png"
         content_settings = ContentSettings(
-            content_type=content_type,
+            content_type=content_type_out,
             content_disposition=f"inline; filename={file_name}"
         )
-        blob_client.upload_blob(await image.read(), overwrite=True, content_settings=content_settings)
+        blob_client.upload_blob(out_buffer.getvalue(), overwrite=True, content_settings=content_settings)
+
         # Generar URL SAS temporal (p. ej. 60 minutos)
         image_url = build_blob_sas_url(
             account_name=AZURE_STORAGE_ACCOUNT_NAME,
