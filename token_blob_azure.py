@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 
 from azure.storage.blob import generate_blob_sas, BlobSasPermissions
 
@@ -10,6 +10,16 @@ try:
     load_dotenv()
 except Exception:
     pass
+
+
+def _parse_connection_string(connection_string: str) -> Tuple[Optional[str], Optional[str]]:
+    """Extrae AccountName y AccountKey de una connection string de Azure."""
+    if not connection_string:
+        return None, None
+    parts = dict(
+        kv.split("=", 1) for kv in connection_string.split(";") if "=" in kv
+    )
+    return parts.get("AccountName"), parts.get("AccountKey")
 
 
 def build_blob_sas_url(
@@ -67,13 +77,22 @@ def build_blob_sas_url(
 def generate_sas_from_env(blob_name: Optional[str] = None, expiry_minutes: int = 60, https_only: bool = True, ip_address: Optional[str] = None) -> str:
     """
     Helper para generar la URL SAS leyendo configuración desde variables de entorno:
-    - AZURE_STORAGE_ACCOUNT_NAME
-    - AZURE_STORAGE_ACCOUNT_KEY
+    - AZURE_STORAGE_ACCOUNT_NAME (opcional si hay connection string)
+    - AZURE_STORAGE_ACCOUNT_KEY (opcional si hay connection string)
     - AZURE_BLOB_CONTAINER_NAME
+    - AZURE_STORAGE_CONNECTION_STRING (opcional; se usa para derivar nombre/clave)
     - AZURE_DEFAULT_BLOB_NAME (opcional)
     """
     account_name = os.getenv("AZURE_STORAGE_ACCOUNT_NAME")
     account_key = os.getenv("AZURE_STORAGE_ACCOUNT_KEY")
+
+    # Si no hay nombre/clave, intenta derivarlos de la connection string
+    if not account_name or not account_key:
+        conn = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")
+        derived_name, derived_key = _parse_connection_string(conn)
+        account_name = account_name or derived_name
+        account_key = account_key or derived_key
+
     container_name = os.getenv("AZURE_BLOB_CONTAINER_NAME")
 
     # blob_name puede venir por parámetro, por env o usar un valor por defecto
