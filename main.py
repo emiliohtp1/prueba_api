@@ -6,6 +6,7 @@ import os
 from models import ProductoRopa
 from azure.storage.blob import BlobServiceClient
 from token_blob_azure import build_blob_sas_url
+from azure.storage.blob import ContentSettings
 
 # Leer la URI desde variables de entorno
 MONGO_URI = os.getenv("MONGO_URI")
@@ -52,10 +53,15 @@ async def create_productos(
 ):
     image_url = None
     if image:
-        # Subir imagen a Azure Blob Storage
+        # Subir imagen a Azure Blob Storage con tipo de contenido correcto para que el navegador la renderice
         file_name = f"{image.filename}"
         blob_client = container_client.get_blob_client(file_name)
-        blob_client.upload_blob(await image.read(), overwrite=True)
+        content_type = image.content_type or "image/png"
+        content_settings = ContentSettings(
+            content_type=content_type,
+            content_disposition=f"inline; filename={file_name}"
+        )
+        blob_client.upload_blob(await image.read(), overwrite=True, content_settings=content_settings)
         # Generar URL SAS temporal (p. ej. 60 minutos)
         image_url = build_blob_sas_url(
             account_name=AZURE_STORAGE_ACCOUNT_NAME,
