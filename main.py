@@ -5,17 +5,26 @@ from typing import List, Optional, Literal
 import os
 from models import ProductoRopa
 from azure.storage.blob import BlobServiceClient
+from token_blob_azure import build_blob_sas_url
 
 # Leer la URI desde variables de entorno
 MONGO_URI = os.getenv("MONGO_URI")
 AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 AZURE_BLOB_CONTAINER_NAME = os.getenv("AZURE_BLOB_CONTAINER_NAME", "imagenes-productos")
+AZURE_STORAGE_ACCOUNT_NAME = os.getenv("AZURE_STORAGE_ACCOUNT_NAME")
+AZURE_STORAGE_ACCOUNT_KEY = os.getenv("AZURE_STORAGE_ACCOUNT_KEY")
 
 if not MONGO_URI:
     raise ValueError("MONGO_URI no está definida")
 
 if not AZURE_STORAGE_CONNECTION_STRING:
     raise ValueError("AZURE_STORAGE_CONNECTION_STRING no está definida")
+
+if not AZURE_STORAGE_ACCOUNT_NAME:
+    raise ValueError("AZURE_STORAGE_ACCOUNT_NAME no está definida")
+
+if not AZURE_STORAGE_ACCOUNT_KEY:
+    raise ValueError("AZURE_STORAGE_ACCOUNT_KEY no está definida")
 
 print(f"Conectando a MongoDB en: {MONGO_URI}")
 print(f"Conectando a Azure Blob Storage en: {AZURE_BLOB_CONTAINER_NAME}")
@@ -47,7 +56,15 @@ async def create_productos(
         file_name = f"{image.filename}"
         blob_client = container_client.get_blob_client(file_name)
         blob_client.upload_blob(await image.read(), overwrite=True)
-        image_url = blob_client.url
+        # Generar URL SAS temporal (p. ej. 60 minutos)
+        image_url = build_blob_sas_url(
+            account_name=AZURE_STORAGE_ACCOUNT_NAME,
+            account_key=AZURE_STORAGE_ACCOUNT_KEY,
+            container_name=AZURE_BLOB_CONTAINER_NAME,
+            blob_name=file_name,
+            expiry_minutes=60,
+            https_only=True,
+        )
 
     producto_data = {
         "product_type": product_type,
