@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import Literal, Optional, Dict
 
 class ProductoRopa(BaseModel):
-    product_type: Literal["pant", "shirt", "tshirt", "cap", "belt"]
+    product_type: Literal["pant", "shirt", "tshirt", "cap", "belt", "shoes"]
     product_name: str
     size: Literal["XS", "S", "M", "L", "XL", "XXL"]
     price: float
@@ -12,7 +12,7 @@ class ProductoRopa(BaseModel):
 
 class ProductoDetalle(BaseModel):
     id: str
-    product_type: Literal["pant", "shirt", "tshirt", "cap", "belt"]
+    product_type: Literal["pant", "shirt", "tshirt", "cap", "belt", "shoes"]
     size: Literal["XS", "S", "M", "L", "XL", "XXL"]
     price: float
     amount: int

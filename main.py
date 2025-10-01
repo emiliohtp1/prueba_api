@@ -55,7 +55,7 @@ class ProductosInput(BaseModel):
 
 @app.post("/productos")
 async def create_productos(
-    product_type: Literal["pant", "shirt", "tshirt", "cap", "belt"] = Form(...),
+    product_type: Literal["pant", "shirt", "tshirt", "cap", "belt", "shoes"] = Form(...),
     product_name: str = Form(...),
     size: Literal["XS", "S", "M", "L", "XL", "XXL"] = Form(...),
     price: float = Form(...),
