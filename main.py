@@ -154,27 +154,17 @@ async def create_productos(
         "msg": "Producto agregado/actualizado correctamente"
     }
 
-@app.get("/get_productos", response_model=ProductosRespuesta)
+@app.get("/get_productos", response_model=List[ProductoDetalle])
 def get_productos():
-    products: Dict[str, Dict[str, Dict[str, ProductoDetalle]]] = {}
-
+    items: List[ProductoDetalle] = []
     for doc in collection.find():
-        product_type = doc.get("product_type")
-        product_name = doc.get("product_name", "unknown")
-        size = doc.get("size")
         detalle = ProductoDetalle(
             id=str(doc.get("_id")),
-            product_type=product_type,
-            size=size,
+            product_type=doc.get("product_type"),
+            size=doc.get("size"),
             price=float(doc.get("price", 0)),
             amount=int(doc.get("amount", 0)),
             image_url=doc.get("image_url")
         )
-
-        if product_type not in products:
-            products[product_type] = {}
-        if product_name not in products[product_type]:
-            products[product_type][product_name] = {}
-        products[product_type][product_name][size] = detalle
-
-    return {"products": products}
+        items.append(detalle)
+    return items
