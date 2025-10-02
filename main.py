@@ -170,24 +170,24 @@ def get_productos():
         items.append(detalle)
     return items
 
-@app.get("/get_productos_nested", response_model=ProductosRespuesta)
-def get_productos_nested():
-    products: Dict[str, Dict[str, Dict[str, ProductoDetalle]]] = {}
-    for doc in collection.find():
-        product_type = doc.get("product_type")
-        product_name = doc.get("product_name", "unknown")
-        size = doc.get("size")
-        detalle = ProductoDetalle(
-            id=str(doc.get("_id")),
-            product_type=product_type,
-            size=size,
-            price=float(doc.get("price", 0)),
-            amount=int(doc.get("amount", 0)),
-            image_url=doc.get("image_url")
-        )
-        if product_type not in products:
-            products[product_type] = {}
-        if product_name not in products[product_type]:
-            products[product_type][product_name] = {}
-        products[product_type][product_name][size] = detalle
-    return {"products": products}
+#@app.get("/get_productos_nested", response_model=ProductosRespuesta)
+#def get_productos_nested():
+#   products: Dict[str, Dict[str, Dict[str, ProductoDetalle]]] = {}
+#    for doc in collection.find():
+#        product_type = doc.get("product_type")
+#        product_name = doc.get("product_name", "unknown")
+#        size = doc.get("size")
+#        detalle = ProductoDetalle(
+#            id=str(doc.get("_id")),
+#            product_type=product_type,
+#            size=size,
+#            price=float(doc.get("price", 0)),
+#            amount=int(doc.get("amount", 0)),
+#            image_url=doc.get("image_url")
+#        )
+#        if product_type not in products:
+#            products[product_type] = {}
+#        if product_name not in products[product_type]:
+#            products[product_type][product_name] = {}
+#        products[product_type][product_name][size] = detalle
+#    return {"products": products}
