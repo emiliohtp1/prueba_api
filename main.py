@@ -10,6 +10,7 @@ from azure.storage.blob import ContentSettings
 from io import BytesIO
 from PIL import Image
 from pymongo.errors import DuplicateKeyError
+from uuid import uuid4
 
 # Leer la URI desde variables de entorno
 MONGO_URI = os.getenv("MONGO_URI")
@@ -98,10 +99,9 @@ async def create_productos(
                 im.save(out_buffer, format=format_out, optimize=True)
             out_buffer.seek(0)
 
-        # Preparar nombre de archivo con extensión acorde al formato de salida
-        base_name = os.path.splitext(image.filename)[0] or "imagen"
+        # Preparar nombre de archivo único con extensión acorde al formato de salida
         ext = ".jpg" if format_out == "JPEG" else ".png"
-        file_name = f"{base_name}{ext}"
+        file_name = f"{uuid4().hex}{ext}"
 
         # Subir imagen a Azure Blob Storage con tipo de contenido correcto
         blob_client = container_client.get_blob_client(file_name)
@@ -109,7 +109,7 @@ async def create_productos(
             content_type=content_type_out,
             content_disposition=f"inline; filename={file_name}"
         )
-        blob_client.upload_blob(out_buffer.getvalue(), overwrite=True, content_settings=content_settings)
+        blob_client.upload_blob(out_buffer.getvalue(), overwrite=False, content_settings=content_settings)
 
         # Generar URL SAS temporal (p. ej. 60 minutos)
         image_url = build_blob_sas_url(
