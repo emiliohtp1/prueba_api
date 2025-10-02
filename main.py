@@ -30,7 +30,7 @@ if not AZURE_STORAGE_ACCOUNT_NAME:
 if not AZURE_STORAGE_ACCOUNT_KEY:
     raise ValueError("AZURE_STORAGE_ACCOUNT_KEY no está definida")
 
-print(f"Conectando a MongoDB en: {MONGO_URI}")
+print(f"Conectando a MongoDB por MONGO_URI")
 print(f"Conectando a Azure Blob Storage en: {AZURE_BLOB_CONTAINER_NAME}")
 
 client = MongoClient(MONGO_URI)
