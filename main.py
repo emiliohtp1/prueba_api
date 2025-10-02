@@ -111,13 +111,13 @@ async def create_productos(
         )
         blob_client.upload_blob(out_buffer.getvalue(), overwrite=False, content_settings=content_settings)
 
-        # Generar URL SAS temporal (p. ej. 60 minutos)
+        # Generar URL SAS temporal (24 horas)
         image_url = build_blob_sas_url(
             account_name=AZURE_STORAGE_ACCOUNT_NAME,
             account_key=AZURE_STORAGE_ACCOUNT_KEY,
             container_name=AZURE_BLOB_CONTAINER_NAME,
             blob_name=file_name,
-            expiry_minutes=60,
+            expiry_minutes=1440,
             https_only=True,
         )
 

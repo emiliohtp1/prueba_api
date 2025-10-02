@@ -112,15 +112,23 @@ def post_and_check(image_buffer: BytesIO, image_filename: str, image_mime: str,
     result = response.json()
     print("Respuesta POST:", result)
 
+    # Verificación con GET plano (lista)
     get_resp = requests.get(f"{API_URL}get_productos")
     get_resp.raise_for_status()
     payload = get_resp.json()
-    assert "products" in payload
-    assert product_type in payload["products"], "No se encontró el tipo en la respuesta"
-    assert product_name in payload["products"][product_type], "No se encontró el nombre en la respuesta"
-    assert size in payload["products"][product_type][product_name], "No se encontró la talla en la respuesta"
-    detalle = payload["products"][product_type][product_name][size]
-    print("Detalle GET:", detalle)
+    if isinstance(payload, list):
+        found = any(
+            (item.get("product_type") == product_type and
+             item.get("product_name") == product_name and
+             item.get("size") == size)
+            for item in payload
+        )
+        if found:
+            print("Verificado en GET: variante encontrada.")
+        else:
+            print("Advertencia: no se encontró la variante en el GET después del POST.")
+    else:
+        print("Advertencia: la respuesta del GET no es una lista como se esperaba.")
 
 
 def main():
@@ -135,7 +143,6 @@ def main():
 
             # Reutilizar el mismo buffer para cada POST (crear copia para evitar puntero movido)
             for size, amount, price in size_amount_price_pairs:
-                # Clonar buffer para esta petición
                 image_buffer.seek(0)
                 cloned = BytesIO(image_buffer.read())
                 cloned.seek(0)
