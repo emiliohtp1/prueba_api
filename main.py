@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 from typing import List, Optional, Literal, Dict
 import os
-from models import ProductoRopa, ProductosRespuesta, ProductoDetalle
+from models import ProductoRopa, ProductosRespuesta, ProductoDetalle, ProductoDetallePlano
 from azure.storage.blob import BlobServiceClient
 from token_blob_azure import build_blob_sas_url
 from azure.storage.blob import ContentSettings
@@ -154,13 +154,14 @@ async def create_productos(
         "msg": "Producto agregado/actualizado correctamente"
     }
 
-@app.get("/get_productos", response_model=List[ProductoDetalle])
+@app.get("/get_productos", response_model=List[ProductoDetallePlano])
 def get_productos():
-    items: List[ProductoDetalle] = []
+    items: List[ProductoDetallePlano] = []
     for doc in collection.find():
-        detalle = ProductoDetalle(
+        detalle = ProductoDetallePlano(
             id=str(doc.get("_id")),
             product_type=doc.get("product_type"),
+            product_name=doc.get("product_name", "unknown"),
             size=doc.get("size"),
             price=float(doc.get("price", 0)),
             amount=int(doc.get("amount", 0)),
