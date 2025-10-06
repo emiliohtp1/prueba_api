@@ -14,6 +14,7 @@ from uuid import uuid4
 from urllib.parse import urlparse
 from fastapi.responses import StreamingResponse
 from fastapi import HTTPException
+from starlette.middleware.cors import CORSMiddleware
 import re
 
 # Leer la URI desde variables de entorno
@@ -54,6 +55,20 @@ blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CON
 container_client = blob_service_client.get_container_client(AZURE_BLOB_CONTAINER_NAME)
 
 app = FastAPI()
+
+# CORS para permitir consumo desde FlutterFlow Web y tu dominio
+ALLOWED_ORIGINS = [
+    "https://preview.app.flutterflow.io",
+    "https://run.app.flutterflow.io",
+    "https://app.flutterflow.io",
+    os.getenv("APP_WEB_ORIGIN", "*")  # opcional: tu dominio en producción
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
+    allow_headers=["*"])
 
 class ProductosInput(BaseModel):
     productos: List[ProductoRopa]
@@ -234,7 +249,8 @@ def get_image_proxy(blob_name: str):
             downloader.chunks(),
             media_type=content_type,
             headers={
-                "Cache-Control": "public, max-age=86400"
+                "Cache-Control": "public, max-age=86400",
+                "Access-Control-Allow-Origin": "*"
             },
         )
     except Exception:
