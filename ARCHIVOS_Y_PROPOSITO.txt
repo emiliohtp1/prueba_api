@@ -1,0 +1,40 @@
+ARCHIVOS DEL PROYECTO Y SU PROPÓSITO
+
+- main.py
+  API principal con FastAPI. Expone endpoints para:
+  - POST /productos: Crea/actualiza variantes de productos y sube imágenes a Azure Blob Storage.
+  - GET /get_productos: Lista plana de productos; genera URL SAS de imagen al vuelo.
+  - GET /image/{blob_name}: Proxy que sirve la imagen directamente desde Azure para evitar CORS.
+  Además: inicializa conexión a MongoDB y a Azure Blob, configura CORS, y define utilidades internas.
+
+- models.py
+  Modelos Pydantic de datos usados por la API:
+  - ProductoRopa: entrada conceptual de producto.
+  - ProductoDetallePlano: salida del GET plano (incluye product_name y blob_name opcional).
+  - ProductoDetalle y ProductosRespuesta: usados para una respuesta anidada si se reactivara el endpoint nested.
+
+- test_imagenes.py
+  Script interactivo (local) para probar la API con una imagen fija `imagen_test.png`. Permite capturar múltiples tallas con precio y cantidad por producto.
+
+- test_usuario_imagenes.py
+  Variante del script de prueba que permite al usuario seleccionar la ruta de una imagen local y subirla. Usa el flujo de alta de múltiples tallas y valida contra el GET plano.
+
+- token_blob_azure.py
+  (No mostrado aquí) Debe contener la función `build_blob_sas_url` que genera URLs SAS para blobs en Azure, leyendo claves/credenciales desde variables de entorno.
+
+- imagen_test.png
+  Imagen de pruebas utilizada por los scripts locales.
+
+RELACIONES Y FLUJO DE DATOS
+- POST /productos (main.py) sube la imagen a Azure, guarda en MongoDB sólo `blob_name` y metadatos del producto.
+- GET /get_productos (main.py) lee documentos, genera una `image_url` SAS reciente por cada elemento y la devuelve junto con `blob_name`.
+- GET /image/{blob_name} (main.py) sirve la imagen directamente (proxy), evitando CORS en Web.
+- models.py garantiza tipos/formatos de los datos en entradas/salidas.
+- Los scripts de prueba usan estos endpoints para validar el ciclo completo.
+
+VARIABLES DE ENTORNO CLAVE
+- MONGO_URI: cadena de conexión a MongoDB.
+- AZURE_STORAGE_CONNECTION_STRING: conexión al Storage de Azure (Blob service).
+- AZURE_BLOB_CONTAINER_NAME: contenedor de imágenes (por defecto `imagenes-productos`).
+- AZURE_STORAGE_ACCOUNT_NAME / AZURE_STORAGE_ACCOUNT_KEY: credenciales para firmar SAS.
+- APP_WEB_ORIGIN (opcional): dominio de tu app Web para CORS adicional.

@@ -17,13 +17,14 @@ from fastapi import HTTPException
 from starlette.middleware.cors import CORSMiddleware
 import re
 
-# Leer la URI desde variables de entorno
+# Config: lee variables de entorno necesarias para DB y Azure
 MONGO_URI = os.getenv("MONGO_URI")
 AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 AZURE_BLOB_CONTAINER_NAME = os.getenv("AZURE_BLOB_CONTAINER_NAME", "imagenes-productos")
 AZURE_STORAGE_ACCOUNT_NAME = os.getenv("AZURE_STORAGE_ACCOUNT_NAME")
 AZURE_STORAGE_ACCOUNT_KEY = os.getenv("AZURE_STORAGE_ACCOUNT_KEY")
 
+# Validaciones tempranas para evitar iniciar sin secretos requeridos
 if not MONGO_URI:
     raise ValueError("MONGO_URI no está definida")
 
@@ -39,29 +40,29 @@ if not AZURE_STORAGE_ACCOUNT_KEY:
 print(f"Conectando a MongoDB por MONGO_URI")
 print(f"Conectando a Azure Blob Storage en: {AZURE_BLOB_CONTAINER_NAME}")
 
+# Clientes de Mongo y colección
 client = MongoClient(MONGO_URI)
 Db = client["prueba"]
 collection = Db["prueba_collection"]
 
-# Asegurar índice único por combinación (product_type, product_name, size)
+# Índice único para asegurar una sola variante por (tipo, nombre, talla)
 collection.create_index(
     [("product_type", 1), ("product_name", 1), ("size", 1)],
     unique=True,
     name="uq_product_variant"
 )
 
-# Inicializar cliente de Azure Blob Storage
+# Cliente de Azure Blob (contenedor donde se guardan imágenes)
 blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
 container_client = blob_service_client.get_container_client(AZURE_BLOB_CONTAINER_NAME)
 
+# App FastAPI y CORS (permitimos orígenes de FlutterFlow y dominio configurable)
 app = FastAPI()
-
-# CORS para permitir consumo desde FlutterFlow Web y tu dominio
 ALLOWED_ORIGINS = [
     "https://preview.app.flutterflow.io",
     "https://run.app.flutterflow.io",
     "https://app.flutterflow.io",
-    os.getenv("APP_WEB_ORIGIN", "*")  # opcional: tu dominio en producción
+    os.getenv("APP_WEB_ORIGIN", "*")
 ]
 app.add_middleware(
     CORSMiddleware,
@@ -70,9 +71,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
     allow_headers=["*"])
 
+# Modelo envoltorio (no usado directamente por endpoints, útil si se requiere batch)
 class ProductosInput(BaseModel):
     productos: List[ProductoRopa]
 
+# POST /productos: sube imagen (opcional), crea/actualiza variante y guarda blob_name
 @app.post("/productos")
 async def create_productos(
     product_type: Literal["pant", "shirt", "tshirt", "cap", "belt", "shoes"] = Form(...),
@@ -84,10 +87,8 @@ async def create_productos(
 ):
     blob_name: Optional[str] = None
     if image:
-        # Leer bytes originales
+        # Lee bytes originales y procesa (redimensiona y comprime) para optimizar almacenamiento y red
         original_bytes = await image.read()
-
-        # Abrir con Pillow, redimensionar y comprimir
         with Image.open(BytesIO(original_bytes)) as im:
             try:
                 im = Image.open(BytesIO(original_bytes))
@@ -96,6 +97,7 @@ async def create_productos(
             max_size = (400, 400)
             im.thumbnail(max_size, Image.LANCZOS)
 
+            # Selecciona formato de salida según transparencia
             format_out = "JPEG"
             content_type_out = "image/jpeg"
             if im.mode in ("RGBA", "LA"):
@@ -114,11 +116,9 @@ async def create_productos(
                 im.save(out_buffer, format=format_out, optimize=True)
             out_buffer.seek(0)
 
-        # Nombre único
+        # Genera nombre único y sube al contenedor (sin overwrite)
         ext = ".jpg" if format_out == "JPEG" else ".png"
         blob_name = f"{uuid4().hex}{ext}"
-
-        # Subir imagen
         blob_client = container_client.get_blob_client(blob_name)
         content_settings = ContentSettings(
             content_type=content_type_out,
@@ -126,7 +126,7 @@ async def create_productos(
         )
         blob_client.upload_blob(out_buffer.getvalue(), overwrite=False, content_settings=content_settings)
 
-    # Documento base (guardar blob_name; no guardar image_url)
+    # Documento a guardar (solo referencia al blob y metadatos del producto)
     producto_data = {
         "product_type": product_type,
         "product_name": product_name,
@@ -136,7 +136,7 @@ async def create_productos(
         "blob_name": blob_name
     }
 
-    # Upsert por combinación única
+    # Upsert: crea si no existe, si existe actualiza el resto de campos
     query = {"product_type": product_type, "product_name": product_name, "size": size}
     try:
         result = collection.update_one(query, {"$set": producto_data}, upsert=True)
@@ -145,7 +145,7 @@ async def create_productos(
 
     operation = "inserted" if result.upserted_id else ("updated" if result.matched_count > 0 else "no-op")
 
-    # Obtener el _id del documento afectado
+    # Obtiene el _id afectado para retornarlo al cliente
     if result.upserted_id:
         doc_id = str(result.upserted_id)
     else:
@@ -158,22 +158,20 @@ async def create_productos(
         "msg": "Producto agregado/actualizado correctamente"
     }
 
-
+# Utilidad: deduce blob_name de documentos antiguos que guardaban image_url
 def _infer_blob_name_from_legacy_url(image_url: Optional[str]) -> Optional[str]:
     if not image_url:
         return None
     try:
         parsed = urlparse(image_url)
-        # path: /<container>/<blob_name>
         parts = parsed.path.split("/")
         if len(parts) >= 3:
-            # última parte contiene blob + quizá no hay query en path
             return parts[-1]
     except Exception:
         return None
     return None
 
-
+# Utilidad: genera una URL SAS temporal de lectura para un blob
 def _build_sas_for_blob(blob_name: Optional[str]) -> Optional[str]:
     if not blob_name:
         return None
@@ -186,13 +184,13 @@ def _build_sas_for_blob(blob_name: Optional[str]) -> Optional[str]:
         https_only=True,
     )
 
+# GET /get_productos: lista plana con image_url SAS generada al vuelo
 @app.get("/get_productos", response_model=List[ProductoDetallePlano])
 def get_productos():
     items: List[ProductoDetallePlano] = []
     for doc in collection.find():
         blob_name = doc.get("blob_name")
         if not blob_name:
-            # Compatibilidad con documentos antiguos
             blob_name = _infer_blob_name_from_legacy_url(doc.get("image_url"))
         image_url = _build_sas_for_blob(blob_name)
 
@@ -209,34 +207,10 @@ def get_productos():
         items.append(detalle)
     return items
 
-#@app.get("/get_productos_nested", response_model=ProductosRespuesta)
-#def get_productos_nested():
-#   products: Dict[str, Dict[str, Dict[str, ProductoDetalle]]] = {}
-#    for doc in collection.find():
-#        product_type = doc.get("product_type")
-#        product_name = doc.get("product_name", "unknown")
-#        size = doc.get("size")
-#        blob_name = doc.get("blob_name") or _infer_blob_name_from_legacy_url(doc.get("image_url"))
-#        image_url = _build_sas_for_blob(blob_name)
-#        detalle = ProductoDetalle(
-#            id=str(doc.get("_id")),
-#            product_type=product_type,
-#            size=size,
-#            price=float(doc.get("price", 0)),
-#            amount=int(doc.get("amount", 0)),
-#            image_url=image_url,
-#            blob_name=blob_name
-#        )
-#        if product_type not in products:
-#            products[product_type] = {}
-#        if product_name not in products[product_type]:
-#            products[product_type][product_name] = {}
-#        products[product_type][product_name][size] = detalle
-#    return {"products": products}
-
+# GET /image/{blob_name}: proxy que sirve la imagen directamente desde Azure (evita CORS)
 @app.get("/image/{blob_name}")
 def get_image_proxy(blob_name: str):
-    # Validación básica: evitar traversal y caracteres peligrosos
+    # Validación básica del nombre del archivo
     if not re.fullmatch(r"[A-Za-z0-9._-]{8,200}", blob_name):
         raise HTTPException(status_code=400, detail="blob_name inválido")
 
