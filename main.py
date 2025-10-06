@@ -12,6 +12,8 @@ from PIL import Image
 from pymongo.errors import DuplicateKeyError
 from uuid import uuid4
 from urllib.parse import urlparse
+from fastapi.responses import RedirectResponse
+import re
 
 # Leer la URI desde variables de entorno
 MONGO_URI = os.getenv("MONGO_URI")
@@ -215,3 +217,14 @@ def get_productos():
 #            products[product_type][product_name] = {}
 #        products[product_type][product_name][size] = detalle
 #    return {"products": products}
+
+@app.get("/image/{blob_name}")
+def get_image_redirect(blob_name: str):
+    # Validación básica: evitar traversal y caracteres peligrosos
+    if not re.fullmatch(r"[A-Za-z0-9._-]{8,200}", blob_name):
+        return RedirectResponse(url="/", status_code=302)
+
+    sas_url = _build_sas_for_blob(blob_name)
+    if not sas_url:
+        return RedirectResponse(url="/", status_code=302)
+    return RedirectResponse(url=sas_url, status_code=302)
