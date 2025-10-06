@@ -11,6 +11,7 @@ from io import BytesIO
 from PIL import Image
 from pymongo.errors import DuplicateKeyError
 from uuid import uuid4
+from urllib.parse import urlparse
 
 # Leer la URI desde variables de entorno
 MONGO_URI = os.getenv("MONGO_URI")
@@ -63,27 +64,23 @@ async def create_productos(
     amount: int = Form(...),
     image: Optional[UploadFile] = File(None)
 ):
-    image_url = None
+    blob_name: Optional[str] = None
     if image:
         # Leer bytes originales
         original_bytes = await image.read()
 
         # Abrir con Pillow, redimensionar y comprimir
         with Image.open(BytesIO(original_bytes)) as im:
-            # Convertir a modo adecuado y preservar orientación EXIF
             try:
                 im = Image.open(BytesIO(original_bytes))
             except Exception:
                 pass
-            # Limitar tamaño máximo (ej. 1280px lado mayor)
             max_size = (400, 400)
             im.thumbnail(max_size, Image.LANCZOS)
 
-            # Elegir formato de salida y content-type
             format_out = "JPEG"
             content_type_out = "image/jpeg"
             if im.mode in ("RGBA", "LA"):
-                # Si hay transparencia, usa PNG para evitar fondo negro
                 format_out = "PNG"
                 content_type_out = "image/png"
                 if im.mode not in ("RGBA", "LA"):
@@ -99,36 +96,26 @@ async def create_productos(
                 im.save(out_buffer, format=format_out, optimize=True)
             out_buffer.seek(0)
 
-        # Preparar nombre de archivo único con extensión acorde al formato de salida
+        # Nombre único
         ext = ".jpg" if format_out == "JPEG" else ".png"
-        file_name = f"{uuid4().hex}{ext}"
+        blob_name = f"{uuid4().hex}{ext}"
 
-        # Subir imagen a Azure Blob Storage con tipo de contenido correcto
-        blob_client = container_client.get_blob_client(file_name)
+        # Subir imagen
+        blob_client = container_client.get_blob_client(blob_name)
         content_settings = ContentSettings(
             content_type=content_type_out,
-            content_disposition=f"inline; filename={file_name}"
+            content_disposition=f"inline; filename={blob_name}"
         )
         blob_client.upload_blob(out_buffer.getvalue(), overwrite=False, content_settings=content_settings)
 
-        # Generar URL SAS temporal (24 horas)
-        image_url = build_blob_sas_url(
-            account_name=AZURE_STORAGE_ACCOUNT_NAME,
-            account_key=AZURE_STORAGE_ACCOUNT_KEY,
-            container_name=AZURE_BLOB_CONTAINER_NAME,
-            blob_name=file_name,
-            expiry_minutes=1440,
-            https_only=True,
-        )
-
-    # Documento base
+    # Documento base (guardar blob_name; no guardar image_url)
     producto_data = {
         "product_type": product_type,
         "product_name": product_name,
         "size": size,
         "price": price,
         "amount": amount,
-        "image_url": image_url
+        "blob_name": blob_name
     }
 
     # Upsert por combinación única
@@ -136,7 +123,6 @@ async def create_productos(
     try:
         result = collection.update_one(query, {"$set": producto_data}, upsert=True)
     except DuplicateKeyError:
-        # En caso de condición de carrera, forzar actualización
         result = collection.update_one(query, {"$set": producto_data}, upsert=False)
 
     operation = "inserted" if result.upserted_id else ("updated" if result.matched_count > 0 else "no-op")
@@ -154,10 +140,44 @@ async def create_productos(
         "msg": "Producto agregado/actualizado correctamente"
     }
 
+
+def _infer_blob_name_from_legacy_url(image_url: Optional[str]) -> Optional[str]:
+    if not image_url:
+        return None
+    try:
+        parsed = urlparse(image_url)
+        # path: /<container>/<blob_name>
+        parts = parsed.path.split("/")
+        if len(parts) >= 3:
+            # última parte contiene blob + quizá no hay query en path
+            return parts[-1]
+    except Exception:
+        return None
+    return None
+
+
+def _build_sas_for_blob(blob_name: Optional[str]) -> Optional[str]:
+    if not blob_name:
+        return None
+    return build_blob_sas_url(
+        account_name=AZURE_STORAGE_ACCOUNT_NAME,
+        account_key=AZURE_STORAGE_ACCOUNT_KEY,
+        container_name=AZURE_BLOB_CONTAINER_NAME,
+        blob_name=blob_name,
+        expiry_minutes=1440,
+        https_only=True,
+    )
+
 @app.get("/get_productos", response_model=List[ProductoDetallePlano])
 def get_productos():
     items: List[ProductoDetallePlano] = []
     for doc in collection.find():
+        blob_name = doc.get("blob_name")
+        if not blob_name:
+            # Compatibilidad con documentos antiguos
+            blob_name = _infer_blob_name_from_legacy_url(doc.get("image_url"))
+        image_url = _build_sas_for_blob(blob_name)
+
         detalle = ProductoDetallePlano(
             id=str(doc.get("_id")),
             product_type=doc.get("product_type"),
@@ -165,7 +185,8 @@ def get_productos():
             size=doc.get("size"),
             price=float(doc.get("price", 0)),
             amount=int(doc.get("amount", 0)),
-            image_url=doc.get("image_url")
+            image_url=image_url,
+            blob_name=blob_name
         )
         items.append(detalle)
     return items
@@ -177,13 +198,16 @@ def get_productos():
 #        product_type = doc.get("product_type")
 #        product_name = doc.get("product_name", "unknown")
 #        size = doc.get("size")
+#        blob_name = doc.get("blob_name") or _infer_blob_name_from_legacy_url(doc.get("image_url"))
+#        image_url = _build_sas_for_blob(blob_name)
 #        detalle = ProductoDetalle(
 #            id=str(doc.get("_id")),
 #            product_type=product_type,
 #            size=size,
 #            price=float(doc.get("price", 0)),
 #            amount=int(doc.get("amount", 0)),
-#            image_url=doc.get("image_url")
+#            image_url=image_url,
+#            blob_name=blob_name
 #        )
 #        if product_type not in products:
 #            products[product_type] = {}

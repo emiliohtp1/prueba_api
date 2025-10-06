@@ -17,6 +17,7 @@ class ProductoDetalle(BaseModel):
     price: float
     amount: int
     image_url: Optional[str] = None
+    blob_name: Optional[str] = None
 
 
 class ProductoDetallePlano(BaseModel):
@@ -27,6 +28,7 @@ class ProductoDetallePlano(BaseModel):
     price: float
     amount: int
     image_url: Optional[str] = None
+    blob_name: Optional[str] = None
 
 
 class ProductosRespuesta(BaseModel):
