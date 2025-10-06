@@ -12,7 +12,8 @@ from PIL import Image
 from pymongo.errors import DuplicateKeyError
 from uuid import uuid4
 from urllib.parse import urlparse
-from fastapi.responses import RedirectResponse
+from fastapi.responses import StreamingResponse
+from fastapi import HTTPException
 import re
 
 # Leer la URI desde variables de entorno
@@ -219,12 +220,22 @@ def get_productos():
 #    return {"products": products}
 
 @app.get("/image/{blob_name}")
-def get_image_redirect(blob_name: str):
+def get_image_proxy(blob_name: str):
     # Validación básica: evitar traversal y caracteres peligrosos
     if not re.fullmatch(r"[A-Za-z0-9._-]{8,200}", blob_name):
-        return RedirectResponse(url="/", status_code=302)
+        raise HTTPException(status_code=400, detail="blob_name inválido")
 
-    sas_url = _build_sas_for_blob(blob_name)
-    if not sas_url:
-        return RedirectResponse(url="/", status_code=302)
-    return RedirectResponse(url=sas_url, status_code=302)
+    try:
+        blob_client = container_client.get_blob_client(blob_name)
+        props = blob_client.get_blob_properties()
+        content_type = (props.content_settings.content_type or "application/octet-stream") if props else "application/octet-stream"
+        downloader = blob_client.download_blob()
+        return StreamingResponse(
+            downloader.chunks(),
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, max-age=86400"
+            },
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada")
